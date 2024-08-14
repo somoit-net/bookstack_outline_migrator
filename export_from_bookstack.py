@@ -43,6 +43,10 @@ def get_all_shelves():
     response = requests.get(f"{config_data['BOOKSTACK_BASE_URL']}/api/shelves", headers=headers)
     return response.json()['data']
 
+def get_all_books():
+    response = requests.get(f"{config_data['BOOKSTACK_BASE_URL']}/api/books", headers=headers)
+    return response.json()['data']
+
 def get_shelf(shelf_id):
     response = requests.get(f"{config_data['BOOKSTACK_BASE_URL']}/api/shelves/{shelf_id}", headers=headers)
     return response.json()
@@ -57,7 +61,9 @@ def get_page_content(page_id):
 
 def export_data():
 
-    print("\nExporting data from bookstack...\n\n")
+    print("\nExporting data from bookstack...\n")
+
+    all_books = get_all_books()
 
     # Export Shelves
     shelves = get_all_shelves()
@@ -74,7 +80,9 @@ def export_data():
         print(f"(Shelf)   {Colors.RED}[[ {shelf_data['name']} ]]{Colors.RESET}")
 
         for book_reference in shelf['books']:
+            all_books = [item for item in all_books if item["id"] != book_reference['id']]
             book = get_book(book_reference['id'])
+
             book_data = {
                 "id": book['id'],
                 "name": book['name'],
@@ -113,10 +121,58 @@ def export_data():
 
         shelves_data.append(shelf_data)
 
+
+    shelf_data = {
+        "id": 'xxxxxxxx',
+        "name": 'Orphaned Books',
+        "description": 'Books not placed in shelf',
+        "books": []
+    }
+
+    print()
+    print(f"(Shelf)   {Colors.RED}[[ {shelf_data['name']} ]]{Colors.RESET}")
+
+
+    for book_reference in all_books:
+        book = get_book(book_reference['id'])
+
+        book_data = {
+            "id": book['id'],
+            "name": book['name'],
+            "description": book.get('description', ''),
+            "chapters": [],
+            "pages": []
+        }
+        print(f"(Book)      {Colors.GREEN}[ {book_data['name']} ]{Colors.RESET}")
+
+        chapters = [item for item in book['contents'] if item["type"] == "chapter"]
+        for chapter in chapters:
+            chapter_data = {
+                "id": chapter['id'],
+                "name": chapter['name'],
+                "description": chapter.get('description', ''),
+                "pages": []
+            }
+            print(f"(Chapter)     {Colors.YELLOW}+ {chapter_data['name']}{Colors.RESET}")
+            for page in chapter['pages']:
+                page_with_content = get_page_content(page['id'])
+                chapter_data['pages'].append(page_with_content)
+                print(f"(Page)          {Colors.BRIGHT_BLUE}- {page['name']}{Colors.RESET}")
+            book_data["chapters"].append(chapter_data)
+
+        pages = [item for item in book['contents'] if item["type"] == "page"]
+        for page in pages:
+            page_with_content = get_page_content(page['id'])
+            book_data['pages'].append(page_with_content)
+            print(f"(Page)        {Colors.BRIGHT_BLUE}- {page['name']}{Colors.RESET}")
+
+        shelf_data["books"].append(book_data)
+    shelves_data.append(shelf_data)
+
     with open(config_data['BOOKSTACK_EXPORT_FILENAME'], "w") as f:
         json.dump(shelves_data, f, indent=4)
 
-    print("Export finished (" + config_data['BOOKSTACK_EXPORT_FILENAME'] + ")")
+    print("\n\nExport finished (" + config_data['BOOKSTACK_EXPORT_FILENAME'] + ")")
 
 
 if __name__ == "__main__":
