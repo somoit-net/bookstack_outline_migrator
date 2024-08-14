@@ -1,9 +1,9 @@
 # Bookstack
-BOOKSTACK_BASE_URL=https://bookstack-test.mydomain.com
+BOOKSTACK_BASE_URL=https://bookstack.mydomain.com
 BOOKSTACK_API_TOKEN_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 BOOKSTACK_API_TOKEN_SECRET=xxxxxxxxxxxxxxxxxxxxxxxx
 BOOKSTACK_EXPORT_FILENAME=bookstack_export.json
 
 # Outline
-OUTLINE_BASE_URL=https://outline-test.mydomain.com
+OUTLINE_BASE_URL=https://outline.mydomain.com
 OUTLINE_API_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
