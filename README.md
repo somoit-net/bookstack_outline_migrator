@@ -91,3 +91,5 @@ To import the exported content into Outline, use the following command:
 The output is similar to the import process
 
 **Note:** The Bookstack site must still be accessible so the script can automatically download the images.
+
+**Note:** Do not forget to disable rate limiter. Otherwise Outline would return errors during import: `RATE_LIMITER_ENABLED=false`
