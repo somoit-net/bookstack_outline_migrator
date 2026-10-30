@@ -8,6 +8,7 @@ import html2text
 import os
 import re
 from bs4 import BeautifulSoup
+import struct
 
 class Colors:
     RED = '\033[91m'
@@ -33,16 +34,88 @@ def read_config(file_path):
         print("Invalid config file syntax (" + line.replace("\n","") + ")")
         exit(1)
 
+def get_png_dimensions(url):
+    response = requests.get(url, timeout=60)
+    response.raise_for_status()
 
+    image_data = response.content
 
+    if image_data[:8] != b'\x89PNG\r\n\x1a\n':
+        raise ValueError("File is not a valid PNG: " + url)
 
-def html_to_markdown (html):
+    width, height = struct.unpack(">II", image_data[16:24])
+
+    return width, height
+
+def upload_drawio_image(url, document_id):
+    """
+    Download a BookStack Draw.io image into Outline
+    as a real attachment, preserving the original PNG.
+    """
+
+    data = {
+        "url": url,
+        "documentId": document_id
+    }
+
+    response = requests.post(
+        config_data['OUTLINE_BASE_URL'] + "/api/attachments.createFromUrl",
+        headers=headers,
+        json=data,
+        timeout=120
+    )
+
+    if response.status_code != 200:
+        error_data = response.json()
+        raise Exception(
+            "Draw.io upload failed: {}".format(
+                error_data.get('message', response.text)
+            )
+        )
+
+    return response.json()['data']
+
+def html_to_markdown(html, document_id=None):
+    soup = BeautifulSoup(html, "html.parser")
+    drawio_images = []
+
+    for img in soup.find_all("img"):
+        src = img.get("src")
+
+        if not src or "/drawio/" not in src.lower():
+            continue
+
+        if not document_id:
+            continue
+
+        print("          Uploading Draw.io diagram: " + src)
+
+        width, height = get_png_dimensions(src)
+
+        attachment = upload_drawio_image(src, document_id)
+
+        # Create exact Markdown ourselves
+        markdown_image = (
+            f'![]({attachment["url"]} '
+            f'"source=diagrams.net ={width}x{height}")'
+        )
+
+        # Replace image with unique placeholder
+        placeholder = f"DRAWIO_PLACEHOLDER_{len(drawio_images)}"
+
+        img.replace_with(placeholder)
+
+        drawio_images.append((placeholder, markdown_image))
+
     h = html2text.HTML2Text()
-    h.ignore_links = False  # Set to True to ignore links
+    h.ignore_links = False
 
-    markdown = h.handle(html)
+    markdown = h.handle(str(soup))
 
-    # Remove spaces introduced after hyphens in image URLs.
+    # Restore exact Draw.io Markdown
+    for placeholder, markdown_image in drawio_images:
+        markdown = markdown.replace(placeholder, markdown_image)
+
     markdown = re.sub(
         r'(https?://[^\s)]*?)-\s+([^/\s)]*)',
         r'\1-\2',
@@ -50,6 +123,30 @@ def html_to_markdown (html):
     )
 
     return markdown.replace("%00", "%5BNULL%5D")
+
+
+def update_document(document_id, text):
+    data = {
+        "id": document_id,
+        "text": text
+    }
+
+    response = requests.post(
+        config_data['OUTLINE_BASE_URL'] + "/api/documents.update",
+        headers=headers,
+        json=data
+    )
+
+    if response.status_code != 200:
+        error_data = response.json()
+        print(
+            "Document update failed: {}".format(
+                error_data.get('message', response.text)
+            )
+        )
+        exit(1)
+
+    return response.json()['data']
 
 def has_null (text):
     if "%00" in text:
@@ -140,7 +237,19 @@ def import_data():
             print(f"(Book)      {Colors.GREEN}[ {bookstack_book['name']} ]{Colors.RESET}")
             outline_book = create_document(bookstack_book['name'],bookstack_book['description'],outline_shelf['id'],None)
             for bookstack_page in bookstack_book['pages']:
-                outline_page = create_document(bookstack_page['name'],html_to_markdown(bookstack_page['html']),outline_shelf['id'],outline_book['id'])
+                outline_page = create_document(
+                    bookstack_page['name'],
+                    "",
+                    outline_shelf['id'],
+                    outline_book['id']
+                )
+
+                markdown = html_to_markdown(
+                    bookstack_page['html'],
+                    outline_page['id']
+                )
+
+                update_document(outline_page['id'], markdown)
                 print(f"(Page)        {Colors.BRIGHT_BLUE}- {bookstack_page['name']}{Colors.RESET}")
 
             for bookstack_chapter in bookstack_book['chapters']:
@@ -149,7 +258,22 @@ def import_data():
 
                 for bookstack_chapter_page in bookstack_chapter['pages']:
                     print(f"(Page)          {Colors.BRIGHT_BLUE}- {bookstack_chapter_page['name']}{Colors.RESET}" + has_null(bookstack_chapter_page['html']))
-                    outline_chapter_page = create_document(bookstack_chapter_page['name'],html_to_markdown(bookstack_chapter_page['html']),outline_shelf['id'],outline_chapter['id'])
+                    outline_chapter_page = create_document(
+                        bookstack_chapter_page['name'],
+                        "",
+                        outline_shelf['id'],
+                        outline_chapter['id']
+                    )
+
+                    markdown = html_to_markdown(
+                        bookstack_chapter_page['html'],
+                        outline_chapter_page['id']
+                    )
+
+                    update_document(
+                        outline_chapter_page['id'],
+                        markdown
+                    )
 
     print("Import finished")
 
