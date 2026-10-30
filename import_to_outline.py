@@ -6,6 +6,8 @@ import requests
 import json
 import html2text
 import os
+import re
+from bs4 import BeautifulSoup
 
 class Colors:
     RED = '\033[91m'
@@ -37,7 +39,17 @@ def read_config(file_path):
 def html_to_markdown (html):
     h = html2text.HTML2Text()
     h.ignore_links = False  # Set to True to ignore links
-    return h.handle(html).replace("%00","%5BNULL%5D")
+
+    markdown = h.handle(html)
+
+    # Remove spaces introduced after hyphens in image URLs.
+    markdown = re.sub(
+        r'(https?://[^\s)]*?)-\s+([^/\s)]*)',
+        r'\1-\2',
+        markdown
+    )
+
+    return markdown.replace("%00", "%5BNULL%5D")
 
 def has_null (text):
     if "%00" in text:
